@@ -1,0 +1,6 @@
+@DogadjajiApp_HostAddress = http://localhost:5241
+
+GET {{DogadjajiApp_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
