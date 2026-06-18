@@ -1,3 +1,4 @@
+using EventService;
 using EventService.Data;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
@@ -6,6 +7,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSqlServer<EventDbContext>(
     builder.Configuration.GetConnectionString("DefaultConnection"));
+builder.Services.Configure<RabbitMqOptions>(
+    builder.Configuration.GetSection(RabbitMqOptions.SectionName));
+builder.Services.AddSingleton<IRabbitMqPublisher, RabbitMqPublisher>();
+builder.Services.AddHostedService<EventService.HostedServices.OutboxMessagePublisher>();
 
 // HTTP klijent za pozivanje LocationService SA POLLY mehanizmima
 builder.Services.AddHttpClient("LocationService", client =>
@@ -48,8 +53,15 @@ builder.Services.AddHttpClient("LocationService", client =>
 });
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();

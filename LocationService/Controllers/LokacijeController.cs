@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace LocationService.Controllers
 {
+    [Route("[controller]/[action]/{id?}")]
     public class LokacijeController : Controller
     {
         public LokacijeController(LocationDbContext dbContext)
@@ -13,6 +14,7 @@ namespace LocationService.Controllers
 
         public LocationDbContext DbContext { get; }
 
+        [HttpGet]
         public IActionResult Index()
         {
             var lokacije = DbContext.Lokacije.ToList();
@@ -27,6 +29,7 @@ namespace LocationService.Controllers
             return Ok(lokacija);
         }
 
+        [HttpGet]
         public IActionResult Edit(int id)
         {
             var lokacija = DbContext.Lokacije.Find(id);
@@ -46,6 +49,7 @@ namespace LocationService.Controllers
             return Ok(existing);
         }
 
+        [HttpGet]
         public IActionResult Delete(int id)
         {
             var lokacija = DbContext.Lokacije.Find(id);

@@ -4,7 +4,8 @@ using RegistrationService.Domains;
 
 namespace RegistrationService.Controllers
 {
-    public class PrijaveController: Controller
+    [Route("[controller]/[action]/{id?}")]
+    public class PrijaveController : Controller
     {
         public PrijaveController(RegistrationDbContext dbContext)
         {
@@ -13,6 +14,7 @@ namespace RegistrationService.Controllers
 
         public RegistrationDbContext DbContext { get; }
 
+        [HttpGet]
         public IActionResult Index()
         {
             return Ok(DbContext.Prijave.ToList());
@@ -27,6 +29,7 @@ namespace RegistrationService.Controllers
             return Ok(prijava);
         }
 
+        [HttpGet]
         public IActionResult Delete(int id)
         {
             var prijava = DbContext.Prijave.Find(id);

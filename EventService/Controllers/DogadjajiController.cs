@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EventService.Controllers
 {
+    [Route("[controller]/[action]/{id?}")]
     public class DogadjajiController : Controller
     {
         public DogadjajiController(EventDbContext dbContext, IHttpClientFactory httpClientFactory)
@@ -16,6 +17,7 @@ namespace EventService.Controllers
         public EventDbContext DbContext { get; }
         public IHttpClientFactory HttpClientFactory { get; }
 
+        [HttpGet]
         public IActionResult Index()
         {
             var dogadjaji = DbContext.Dogadjaji
@@ -25,6 +27,7 @@ namespace EventService.Controllers
         }
 
         // Dohvata lokaciju iz LocationService (demonstracija Polly)
+        [HttpGet]
         public async Task<IActionResult> GetLokacija(int lokacijaId)
         {
             try
@@ -48,13 +51,40 @@ namespace EventService.Controllers
         }
 
         [HttpPost]
-        public IActionResult Create(Dogadjaj dogadjaj)
+        public async Task<IActionResult> Create(Dogadjaj dogadjaj)
         {
-            DbContext.Dogadjaji.Add(dogadjaj);
-            DbContext.SaveChanges();
-            return Ok(dogadjaj);
+            await using var transaction = await DbContext.Database.BeginTransactionAsync();
+            try
+            {
+                DbContext.Dogadjaji.Add(dogadjaj);
+                await DbContext.SaveChangesAsync();
+
+                var outboxMessage = new OutboxMessage
+                {
+                    EventType = "DogadjajCreated",
+                    Payload = System.Text.Json.JsonSerializer.Serialize(new Shared.Events.DogadjajCreatedEvent
+                    {
+                        DogadjajId = dogadjaj.DogadjajId,
+                        NazivDogadjaja = dogadjaj.NazivDogadjaja,
+                        Datum = dogadjaj.Datum
+                    }),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                DbContext.OutboxMessages.Add(outboxMessage);
+                await DbContext.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(dogadjaj);
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, $"Greška: {ex.Message}");
+            }
         }
 
+        [HttpGet]
         public IActionResult Edit(int id)
         {
             var dogadjaj = DbContext.Dogadjaji.Find(id);
@@ -78,6 +108,7 @@ namespace EventService.Controllers
             return Ok(existing);
         }
 
+        [HttpGet]
         public IActionResult Delete(int id)
         {
             var dogadjaj = DbContext.Dogadjaji.Find(id);

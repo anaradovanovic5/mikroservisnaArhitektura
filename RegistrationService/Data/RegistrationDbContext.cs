@@ -5,18 +5,18 @@ namespace RegistrationService.Data
 {
     public class RegistrationDbContext : DbContext
     {
-        public RegistrationDbContext(DbContextOptions options) : base(options) { }
-        protected RegistrationDbContext() { }
+        public RegistrationDbContext(DbContextOptions<RegistrationDbContext> options) : base(options) { }
 
         public DbSet<Predavac> Predavaci { get; set; }
         public DbSet<Prijava> Prijave { get; set; }
         public DbSet<DogadjajPredavac> DogadjajPredavaci { get; set; }
+        public DbSet<DogadjajReference> DogadjajReference { get; set; }
+        public DbSet<ProcessedMessage> ProcessedMessages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Predavac>().HasKey(p => p.PredavacId);
-
-            modelBuilder.Entity<DogadjajPredavac>().HasKey(dp => dp.Id);
+            modelBuilder.Entity<DogadjajReference>().HasIndex(x => x.DogadjajId).IsUnique();
+            modelBuilder.Entity<ProcessedMessage>().HasIndex(x => x.EventId).IsUnique();
         }
     }
 }

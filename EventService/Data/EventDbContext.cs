@@ -5,16 +5,16 @@ namespace EventService.Data
 {
     public class EventDbContext : DbContext
     {
-        public EventDbContext(DbContextOptions options) : base(options) { }
-        protected EventDbContext() { }
+        public EventDbContext(DbContextOptions<EventDbContext> options) : base(options) { }
 
         public DbSet<Dogadjaj> Dogadjaji { get; set; }
         public DbSet<VrstaDogadjaja> VrsteDogadjaja { get; set; }
+        public DbSet<OutboxMessage> OutboxMessages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Dogadjaj>().HasKey(d => d.DogadjajId);
             modelBuilder.Entity<VrstaDogadjaja>().HasKey(v => v.VrstaId);
+            modelBuilder.Entity<OutboxMessage>().HasIndex(x => x.CreatedAt);
         }
     }
 }

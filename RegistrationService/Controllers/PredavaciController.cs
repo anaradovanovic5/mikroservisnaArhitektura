@@ -4,6 +4,7 @@ using RegistrationService.Domains;
 
 namespace RegistrationService.Controllers
 {
+    [Route("[controller]/[action]/{id?}")]
     public class PredavaciController : Controller
     {
         public PredavaciController(RegistrationDbContext dbContext)
@@ -13,6 +14,7 @@ namespace RegistrationService.Controllers
 
         public RegistrationDbContext DbContext { get; }
 
+        [HttpGet]
         public IActionResult Index()
         {
             return Ok(DbContext.Predavaci.ToList());
@@ -26,6 +28,7 @@ namespace RegistrationService.Controllers
             return Ok(predavac);
         }
 
+        [HttpGet]
         public IActionResult Delete(int id)
         {
             var predavac = DbContext.Predavaci.Find(id);
