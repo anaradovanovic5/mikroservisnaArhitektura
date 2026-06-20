@@ -1,32 +1,122 @@
-﻿using EventService.Data;
+﻿using EventService.Commands;
+using EventService.Data;
 using EventService.Domains;
+using EventService.Queries;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace EventService.Controllers
 {
     [Route("[controller]/[action]/{id?}")]
     public class DogadjajiController : Controller
     {
-        public DogadjajiController(EventDbContext dbContext, IHttpClientFactory httpClientFactory, IRabbitMqRequestReplyClient requestReplyClient)
+        public DogadjajiController(
+            EventDbContext dbContext,
+            IHttpClientFactory httpClientFactory,
+            IRabbitMqRequestReplyClient requestReplyClient,
+            CreateDogadjajCommandHandler createHandler,
+            EditDogadjajCommandHandler editHandler,
+            DeleteDogadjajCommandHandler deleteHandler,
+            GetAllDogadjajiQueryHandler getAllHandler,
+            GetDogadjajByIdQueryHandler getByIdHandler,
+            FilterDogadjajiByVrstaQueryHandler filterHandler,
+            GetDogadjajEventHistoryQueryHandler historyHandler,
+            GetDogadjajCurrentStateQueryHandler currentStateHandler)
         {
             DbContext = dbContext;
             HttpClientFactory = httpClientFactory;
             RequestReplyClient = requestReplyClient;
+            CreateHandler = createHandler;
+            EditHandler = editHandler;
+            DeleteHandler = deleteHandler;
+            GetAllHandler = getAllHandler;
+            GetByIdHandler = getByIdHandler;
+            FilterHandler = filterHandler;
+            HistoryHandler = historyHandler;
+            CurrentStateHandler = currentStateHandler;
         }
 
         public EventDbContext DbContext { get; }
         public IHttpClientFactory HttpClientFactory { get; }
         public IRabbitMqRequestReplyClient RequestReplyClient { get; }
+        public CreateDogadjajCommandHandler CreateHandler { get; }
+        public EditDogadjajCommandHandler EditHandler { get; }
+        public DeleteDogadjajCommandHandler DeleteHandler { get; }
+        public GetAllDogadjajiQueryHandler GetAllHandler { get; }
+        public GetDogadjajByIdQueryHandler GetByIdHandler { get; }
+        public FilterDogadjajiByVrstaQueryHandler FilterHandler { get; }
+        public GetDogadjajEventHistoryQueryHandler HistoryHandler { get; }
+        public GetDogadjajCurrentStateQueryHandler CurrentStateHandler { get; }
+
+        //CQRS upiti
 
         [HttpGet]
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
+            => Ok(await GetAllHandler.Handle(new GetAllDogadjajiQuery()));
+
+        [HttpGet]
+        public async Task<IActionResult> Edit(int id)
         {
-            var dogadjaji = DbContext.Dogadjaji
-                .Include(d => d.VrstaDogadjaja)
-                .ToList();
-            return Ok(dogadjaji);
+            var dto = await GetByIdHandler.Handle(new GetDogadjajByIdQuery { DogadjajId = id });
+            if (dto == null) return NotFound();
+            return Ok(dto);
         }
+
+        [HttpGet]
+        public async Task<IActionResult> FilterByVrsta(int vrstaId)
+            => Ok(await FilterHandler.Handle(new FilterDogadjajiByVrstaQuery { VrstaId = vrstaId }));
+
+        //CQRS komande
+
+        [HttpPost]
+        public async Task<IActionResult> Create(Dogadjaj dogadjaj)
+        {
+            var rezultat = await CreateHandler.Handle(new CreateDogadjajCommand
+            {
+                NazivDogadjaja = dogadjaj.NazivDogadjaja,
+                Agenda = dogadjaj.Agenda,
+                Datum = dogadjaj.Datum,
+                Trajanje = dogadjaj.Trajanje,
+                Cena = dogadjaj.Cena,
+                LokacijaId = dogadjaj.LokacijaId,
+                VrstaId = dogadjaj.VrstaId
+            });
+            return rezultat.Success ? Ok(rezultat) : BadRequest(rezultat);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Edit(Dogadjaj dogadjaj)
+        {
+            var rezultat = await EditHandler.Handle(new EditDogadjajCommand
+            {
+                DogadjajId = dogadjaj.DogadjajId,
+                NazivDogadjaja = dogadjaj.NazivDogadjaja,
+                Agenda = dogadjaj.Agenda,
+                Datum = dogadjaj.Datum,
+                Trajanje = dogadjaj.Trajanje,
+                Cena = dogadjaj.Cena,
+                LokacijaId = dogadjaj.LokacijaId,
+                VrstaId = dogadjaj.VrstaId
+            });
+            return rezultat.Success ? Ok(rezultat) : BadRequest(rezultat);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var rezultat = await DeleteHandler.Handle(new DeleteDogadjajCommand { DogadjajId = id });
+            return rezultat.Success ? Ok(rezultat) : BadRequest(rezultat);
+        }
+
+        //Event Sourcing
+
+        [HttpGet]
+        public async Task<IActionResult> GetEventHistory(int dogadjajId)
+            => Ok(await HistoryHandler.Handle(new GetDogadjajEventHistoryQuery { DogadjajId = dogadjajId }));
+
+        [HttpGet]
+        public async Task<IActionResult> GetReconstructedState(int dogadjajId)
+            => Ok(await CurrentStateHandler.Handle(new GetDogadjajCurrentStateQuery { DogadjajId = dogadjajId }));
+
 
         // Dohvata lokaciju iz LocationService (demonstracija Polly)
         [HttpGet]
@@ -50,74 +140,6 @@ namespace EventService.Controllers
                 // Circuit Breaker je otvoren ili Timeout je istekao
                 return StatusCode(503, $"LocationService trenutno nedostupan: {ex.Message}");
             }
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Create(Dogadjaj dogadjaj)
-        {
-            await using var transaction = await DbContext.Database.BeginTransactionAsync();
-            try
-            {
-                DbContext.Dogadjaji.Add(dogadjaj);
-                await DbContext.SaveChangesAsync();
-
-                var outboxMessage = new OutboxMessage
-                {
-                    EventType = "DogadjajCreated",
-                    Payload = System.Text.Json.JsonSerializer.Serialize(new Shared.Events.DogadjajCreatedEvent
-                    {
-                        DogadjajId = dogadjaj.DogadjajId,
-                        NazivDogadjaja = dogadjaj.NazivDogadjaja,
-                        Datum = dogadjaj.Datum
-                    }),
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                DbContext.OutboxMessages.Add(outboxMessage);
-                await DbContext.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return Ok(dogadjaj);
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                return StatusCode(500, $"Greška: {ex.Message}");
-            }
-        }
-
-        [HttpGet]
-        public IActionResult Edit(int id)
-        {
-            var dogadjaj = DbContext.Dogadjaji.Find(id);
-            if (dogadjaj == null) return NotFound();
-            return Ok(dogadjaj);
-        }
-
-        [HttpPost]
-        public IActionResult Edit(Dogadjaj dogadjaj)
-        {
-            var existing = DbContext.Dogadjaji.Find(dogadjaj.DogadjajId);
-            if (existing == null) return NotFound();
-            existing.NazivDogadjaja = dogadjaj.NazivDogadjaja;
-            existing.Agenda = dogadjaj.Agenda;
-            existing.Datum = dogadjaj.Datum;
-            existing.Trajanje = dogadjaj.Trajanje;
-            existing.Cena = dogadjaj.Cena;
-            existing.LokacijaId = dogadjaj.LokacijaId;
-            existing.VrstaId = dogadjaj.VrstaId;
-            DbContext.SaveChanges();
-            return Ok(existing);
-        }
-
-        [HttpGet]
-        public IActionResult Delete(int id)
-        {
-            var dogadjaj = DbContext.Dogadjaji.Find(id);
-            if (dogadjaj == null) return NotFound();
-            DbContext.Dogadjaji.Remove(dogadjaj);
-            DbContext.SaveChanges();
-            return Ok("Obrisano");
         }
 
         [HttpGet]

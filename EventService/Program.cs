@@ -1,5 +1,8 @@
 using EventService;
+using EventService.Commands;
 using EventService.Data;
+using EventService.EventSourcing;
+using EventService.Queries;
 using Microsoft.Extensions.Http.Resilience;
 using Polly;
 
@@ -7,24 +10,37 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSqlServer<EventDbContext>(
     builder.Configuration.GetConnectionString("DefaultConnection"));
+
 builder.Services.Configure<RabbitMqOptions>(
     builder.Configuration.GetSection(RabbitMqOptions.SectionName));
+
 builder.Services.AddSingleton<IRabbitMqPublisher, RabbitMqPublisher>();
-builder.Services.AddScoped<SagaOrchestrator>();
 builder.Services.AddSingleton<IRabbitMqRequestReplyClient, RabbitMqRequestReplyClient>();
-builder.Services.AddHostedService<EventService.HostedServices.OutboxMessagePublisher>();
 builder.Services.AddSingleton<ISagaEventPublisher, SagaEventPublisher>();
+
+builder.Services.AddScoped<SagaOrchestrator>();
+builder.Services.AddScoped<IEventStoreService, EventStoreService>();
+
+builder.Services.AddScoped<CreateDogadjajCommandHandler>();
+builder.Services.AddScoped<EditDogadjajCommandHandler>();
+builder.Services.AddScoped<DeleteDogadjajCommandHandler>();
+
+builder.Services.AddScoped<GetAllDogadjajiQueryHandler>();
+builder.Services.AddScoped<GetDogadjajByIdQueryHandler>();
+builder.Services.AddScoped<FilterDogadjajiByVrstaQueryHandler>();
+builder.Services.AddScoped<GetDogadjajEventHistoryQueryHandler>();
+builder.Services.AddScoped<GetDogadjajCurrentStateQueryHandler>();
+
+builder.Services.AddHostedService<EventService.HostedServices.OutboxMessagePublisher>();
 builder.Services.AddHostedService<EventService.HostedServices.SagaKoreografijaConsumer>();
 
-// HTTP klijent za pozivanje LocationService SA POLLY mehanizmima
 builder.Services.AddHttpClient("LocationService", client =>
 {
     client.BaseAddress = new Uri("https://localhost:7002");
-    client.Timeout = TimeSpan.FromSeconds(10); // TIMEOUT
+    client.Timeout = TimeSpan.FromSeconds(10);
 })
 .AddResilienceHandler("location-pipeline", pipeline =>
 {
-    // RETRY — pokušaj 3 puta, cekaj 2s izmeðu pokušaja
     pipeline.AddRetry(new HttpRetryStrategyOptions
     {
         MaxRetryAttempts = 3,
@@ -35,8 +51,6 @@ builder.Services.AddHttpClient("LocationService", client =>
             return ValueTask.CompletedTask;
         }
     });
-
-    // CIRCUIT BREAKER — prekini ako 5 od 10 poziva ne uspe, cekaj 30s
     pipeline.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
     {
         FailureRatio = 0.5,
@@ -67,15 +81,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
+
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
