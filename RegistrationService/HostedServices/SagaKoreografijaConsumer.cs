@@ -3,6 +3,7 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using Shared.Events;
 using System.Text;
+using System.Text.Json;
 
 namespace RegistrationService.HostedServices
 {

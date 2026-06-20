@@ -4,6 +4,7 @@ using EventService.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EventService.Migrations
 {
     [DbContext(typeof(EventDbContext))]
-    partial class EventDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620203842_AddEventStore")]
+    partial class AddEventStore
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -46,9 +49,6 @@ namespace EventService.Migrations
                     b.Property<string>("NazivDogadjaja")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("Otkazan")
-                        .HasColumnType("bit");
 
                     b.Property<double>("Trajanje")
                         .HasColumnType("float");
@@ -183,54 +183,6 @@ namespace EventService.Migrations
                     b.HasKey("VrstaId");
 
                     b.ToTable("VrsteDogadjaja");
-                });
-
-            modelBuilder.Entity("EventService.EventSourcing.DogadjajSnapshot", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Agenda")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("AggregateId")
-                        .HasColumnType("int");
-
-                    b.Property<double>("Cena")
-                        .HasColumnType("float");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("Datum")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("LokacijaId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("NazivDogadjaja")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("Otkazan")
-                        .HasColumnType("bit");
-
-                    b.Property<double>("Trajanje")
-                        .HasColumnType("float");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("int");
-
-                    b.Property<int>("VrstaId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("DogadjajSnapshots");
                 });
 
             modelBuilder.Entity("EventService.Domains.Dogadjaj", b =>
