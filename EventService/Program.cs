@@ -13,6 +13,8 @@ builder.Services.AddSingleton<IRabbitMqPublisher, RabbitMqPublisher>();
 builder.Services.AddScoped<SagaOrchestrator>();
 builder.Services.AddSingleton<IRabbitMqRequestReplyClient, RabbitMqRequestReplyClient>();
 builder.Services.AddHostedService<EventService.HostedServices.OutboxMessagePublisher>();
+builder.Services.AddSingleton<ISagaEventPublisher, SagaEventPublisher>();
+builder.Services.AddHostedService<EventService.HostedServices.SagaKoreografijaConsumer>();
 
 // HTTP klijent za pozivanje LocationService SA POLLY mehanizmima
 builder.Services.AddHttpClient("LocationService", client =>

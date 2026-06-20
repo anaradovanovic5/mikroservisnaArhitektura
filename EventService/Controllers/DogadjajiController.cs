@@ -144,5 +144,27 @@ namespace EventService.Controllers
 
             return Ok(new { Poruka = message, DogadjajId = dogadjajId });
         }
+
+        [HttpPost]
+        public async Task<IActionResult> CreateSagaKoreografija(Dogadjaj dogadjaj)
+        {
+            DbContext.Dogadjaji.Add(dogadjaj);
+            await DbContext.SaveChangesAsync();
+
+            var sagaId = Guid.NewGuid();
+            var ev = new Shared.Events.DogadjajKreiranSagaEvent
+            {
+                SagaId = sagaId,
+                DogadjajId = dogadjaj.DogadjajId,
+                NazivDogadjaja = dogadjaj.NazivDogadjaja,
+                LokacijaId = dogadjaj.LokacijaId
+            };
+
+            var publisher = HttpContext.RequestServices.GetRequiredService<ISagaEventPublisher>();
+            await publisher.PublishAsync("dogadjaj.kreiran", System.Text.Json.JsonSerializer.Serialize(ev), HttpContext.RequestAborted);
+
+            Console.WriteLine($"[Saga Koreografija] DogadjajKreiranSagaEvent objavljen, SagaId={sagaId}, DogadjajId={dogadjaj.DogadjajId}");
+            return Ok(new { Poruka = "Saga koreografija pokrenuta.", SagaId = sagaId, DogadjajId = dogadjaj.DogadjajId });
+        }
     }
 }

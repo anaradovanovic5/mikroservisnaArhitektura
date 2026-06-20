@@ -11,6 +11,7 @@ builder.Services.Configure<RabbitMqOptions>(
 builder.Services.AddHostedService<RegistrationService.HostedServices.RabbitMqConsumerHostedService>();
 builder.Services.AddHostedService<RequestReplyHostedService>();
 builder.Services.AddHostedService<EmailQueueHostedService>();
+builder.Services.AddHostedService<RegistrationService.HostedServices.SagaKoreografijaConsumer>();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();

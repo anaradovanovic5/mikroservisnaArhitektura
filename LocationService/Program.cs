@@ -8,6 +8,7 @@ builder.Services.AddSqlServer<LocationDbContext>(
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHostedService<LocationService.HostedServices.SagaKoreografijaConsumer>();
 
 var app = builder.Build();
 if (app.Environment.IsDevelopment())
