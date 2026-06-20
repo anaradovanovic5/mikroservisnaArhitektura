@@ -54,7 +54,6 @@ namespace EventService
         private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
         {
             if (_channel is not null) return;
-
             await _initLock.WaitAsync(cancellationToken);
             try
             {
@@ -63,6 +62,7 @@ namespace EventService
                 _connection = await _factory.CreateConnectionAsync(cancellationToken);
                 _channel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
+                // Glavni exchange
                 await _channel.ExchangeDeclareAsync(
                     exchange: _options.Exchange,
                     type: ExchangeType.Direct,
@@ -70,17 +70,48 @@ namespace EventService
                     autoDelete: false,
                     cancellationToken: cancellationToken);
 
+                // DLX exchange i DLQ red
+                await _channel.ExchangeDeclareAsync(
+                    exchange: "dogadjaji.dlx",
+                    type: ExchangeType.Direct,
+                    durable: true,
+                    autoDelete: false,
+                    cancellationToken: cancellationToken);
+
+                await _channel.QueueDeclareAsync(
+                    queue: "dogadjaji.dlq",
+                    durable: true,
+                    exclusive: false,
+                    autoDelete: false,
+                    arguments: null,
+                    cancellationToken: cancellationToken);
+
+                await _channel.QueueBindAsync(
+                    queue: "dogadjaji.dlq",
+                    exchange: "dogadjaji.dlx",
+                    routingKey: "dogadjaji.dlq",
+                    cancellationToken: cancellationToken);
+
+                // Glavni red sa DLQ argumentima
+                var queueArgs = new Dictionary<string, object?>
+                {
+                    { "x-dead-letter-exchange", "dogadjaji.dlx" },
+                    { "x-dead-letter-routing-key", "dogadjaji.dlq" }
+                };
+
                 await _channel.QueueDeclareAsync(
                     queue: _options.Queue,
                     durable: true,
                     exclusive: false,
                     autoDelete: false,
-                    arguments: null);
+                    arguments: queueArgs,
+                    cancellationToken: cancellationToken);
 
                 await _channel.QueueBindAsync(
                     queue: _options.Queue,
                     exchange: _options.Exchange,
-                    routingKey: _options.RoutingKey);
+                    routingKey: _options.RoutingKey,
+                    cancellationToken: cancellationToken);
             }
             finally
             {

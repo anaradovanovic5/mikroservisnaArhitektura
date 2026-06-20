@@ -8,14 +8,16 @@ namespace EventService.Controllers
     [Route("[controller]/[action]/{id?}")]
     public class DogadjajiController : Controller
     {
-        public DogadjajiController(EventDbContext dbContext, IHttpClientFactory httpClientFactory)
+        public DogadjajiController(EventDbContext dbContext, IHttpClientFactory httpClientFactory, IRabbitMqRequestReplyClient requestReplyClient)
         {
             DbContext = dbContext;
             HttpClientFactory = httpClientFactory;
+            RequestReplyClient = requestReplyClient;
         }
 
         public EventDbContext DbContext { get; }
         public IHttpClientFactory HttpClientFactory { get; }
+        public IRabbitMqRequestReplyClient RequestReplyClient { get; }
 
         [HttpGet]
         public IActionResult Index()
@@ -116,6 +118,18 @@ namespace EventService.Controllers
             DbContext.Dogadjaji.Remove(dogadjaj);
             DbContext.SaveChanges();
             return Ok("Obrisano");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetBrojPrijava(int dogadjajId)
+        {
+            var payload = System.Text.Json.JsonSerializer.Serialize(new { DogadjajId = dogadjajId });
+            var odgovor = await RequestReplyClient.SendRequestAsync(payload, "dogadjaji.request", HttpContext.RequestAborted);
+
+            if (odgovor == null)
+                return StatusCode(504, "RegistrationService nije odgovorio na vreme.");
+
+            return Ok(odgovor);
         }
     }
 }

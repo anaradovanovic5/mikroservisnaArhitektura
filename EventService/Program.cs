@@ -10,6 +10,7 @@ builder.Services.AddSqlServer<EventDbContext>(
 builder.Services.Configure<RabbitMqOptions>(
     builder.Configuration.GetSection(RabbitMqOptions.SectionName));
 builder.Services.AddSingleton<IRabbitMqPublisher, RabbitMqPublisher>();
+builder.Services.AddSingleton<IRabbitMqRequestReplyClient, RabbitMqRequestReplyClient>();
 builder.Services.AddHostedService<EventService.HostedServices.OutboxMessagePublisher>();
 
 // HTTP klijent za pozivanje LocationService SA POLLY mehanizmima

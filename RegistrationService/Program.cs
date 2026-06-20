@@ -1,5 +1,6 @@
 using RegistrationService;
 using RegistrationService.Data;
+using RegistrationService.HostedServices;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,8 @@ builder.Services.AddSqlServer<RegistrationDbContext>(
 builder.Services.Configure<RabbitMqOptions>(
     builder.Configuration.GetSection(RabbitMqOptions.SectionName));
 builder.Services.AddHostedService<RegistrationService.HostedServices.RabbitMqConsumerHostedService>();
+builder.Services.AddHostedService<RequestReplyHostedService>();
+builder.Services.AddHostedService<EmailQueueHostedService>();
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();

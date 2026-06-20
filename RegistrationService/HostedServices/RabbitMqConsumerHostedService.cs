@@ -138,7 +138,7 @@ namespace RegistrationService.HostedServices
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Greška pri obradi RabbitMQ poruke.");
-                await _channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: true, cancellationToken: cancellationToken);
+                await _channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: cancellationToken);
             }
         }
 
