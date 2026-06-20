@@ -38,5 +38,19 @@ namespace RegistrationService.Controllers
             DbContext.SaveChanges();
             return Ok("Obrisano");
         }
+
+        // SAGA — korak 3: kreiraj inicijalnu prijavu
+        [HttpPost]
+        public IActionResult KreirajInicijalno([FromBody] InicijalnaPrijavaRequest request)
+        {
+            Console.WriteLine($"[Saga] Inicijalna prijava kreirana za DogadjajId={request.DogadjajId}");
+            return Ok(new { Poruka = "Inicijalna prijava kreirana.", request.DogadjajId });
+        }
+    }
+
+    public class InicijalnaPrijavaRequest
+    {
+        public int DogadjajId { get; set; }
+        public string? NazivDogadjaja { get; set; }
     }
 }

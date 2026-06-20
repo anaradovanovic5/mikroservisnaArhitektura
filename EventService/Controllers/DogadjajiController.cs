@@ -131,5 +131,18 @@ namespace EventService.Controllers
 
             return Ok(odgovor);
         }
+
+        [HttpPost]
+        public async Task<IActionResult> CreateSaga(Dogadjaj dogadjaj)
+        {
+            using var scope = HttpContext.RequestServices.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<SagaOrchestrator>();
+            var (success, message, dogadjajId) = await orchestrator.ExecuteAsync(dogadjaj);
+
+            if (!success)
+                return StatusCode(500, new { Greska = message });
+
+            return Ok(new { Poruka = message, DogadjajId = dogadjajId });
+        }
     }
 }

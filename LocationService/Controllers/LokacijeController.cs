@@ -58,5 +58,31 @@ namespace LocationService.Controllers
             DbContext.SaveChanges();
             return Ok("Obrisano");
         }
+
+        // SAGA — korak 2: rezervisi lokaciju
+        [HttpPost]
+        public IActionResult Rezervisi([FromBody] RezervacijaRequest request)
+        {
+            var lokacija = DbContext.Lokacije.Find(request.LokacijaId);
+            if (lokacija == null)
+                return NotFound($"Lokacija {request.LokacijaId} ne postoji.");
+
+            Console.WriteLine($"[Saga] Lokacija {request.LokacijaId} rezervisana za DogadjajId={request.DogadjajId}");
+            return Ok(new { Poruka = "Lokacija rezervisana.", request.LokacijaId });
+        }
+
+        // SAGA — kompenzacija koraka 2: oslobodi rezervaciju
+        [HttpPost]
+        public IActionResult OslobodiRezervaciju([FromBody] RezervacijaRequest request)
+        {
+            Console.WriteLine($"[Saga][Kompenzacija] Lokacija {request.LokacijaId} oslobodjena za DogadjajId={request.DogadjajId}");
+            return Ok(new { Poruka = "Rezervacija oslobodjena.", request.LokacijaId });
+        }
+    }
+
+    public class RezervacijaRequest
+    {
+        public int LokacijaId { get; set; }
+        public int DogadjajId { get; set; }
     }
 }

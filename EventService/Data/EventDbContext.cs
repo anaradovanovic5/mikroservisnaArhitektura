@@ -10,12 +10,13 @@ namespace EventService.Data
         public DbSet<Dogadjaj> Dogadjaji { get; set; }
         public DbSet<VrstaDogadjaja> VrsteDogadjaja { get; set; }
         public DbSet<OutboxMessage> OutboxMessages { get; set; }
+        public DbSet<SagaState> SagaStates { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<VrstaDogadjaja>().HasKey(v => v.VrstaId);
             modelBuilder.Entity<OutboxMessage>().HasIndex(x => x.CreatedAt);
+            modelBuilder.Entity<SagaState>().HasIndex(x => x.SagaId);
         }
     }
 }
-

@@ -10,6 +10,7 @@ builder.Services.AddSqlServer<EventDbContext>(
 builder.Services.Configure<RabbitMqOptions>(
     builder.Configuration.GetSection(RabbitMqOptions.SectionName));
 builder.Services.AddSingleton<IRabbitMqPublisher, RabbitMqPublisher>();
+builder.Services.AddScoped<SagaOrchestrator>();
 builder.Services.AddSingleton<IRabbitMqRequestReplyClient, RabbitMqRequestReplyClient>();
 builder.Services.AddHostedService<EventService.HostedServices.OutboxMessagePublisher>();
 
@@ -51,6 +52,12 @@ builder.Services.AddHttpClient("LocationService", client =>
             return ValueTask.CompletedTask;
         }
     });
+});
+
+builder.Services.AddHttpClient("RegistrationService", client =>
+{
+    client.BaseAddress = new Uri("https://localhost:7003");
+    client.Timeout = TimeSpan.FromSeconds(10);
 });
 
 builder.Services.AddControllersWithViews();
