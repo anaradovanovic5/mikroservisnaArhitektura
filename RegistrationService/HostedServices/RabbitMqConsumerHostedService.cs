@@ -103,7 +103,7 @@ namespace RegistrationService.HostedServices
 
                 await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-                // IDEMPOTENT CONSUMER — provjeri da li je poruka već obrađena
+                // IDEMPOTENT CONSUMER — proveri da li je poruka već obrađena
                 var alreadyProcessed = await db.ProcessedMessages
                     .AnyAsync(x => x.EventId == ea.BasicProperties.MessageId, cancellationToken);
 
