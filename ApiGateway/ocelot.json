@@ -10,7 +10,17 @@
         }
       ],
       "UpstreamPathTemplate": "/api/dogadjaji/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ]
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "CacheOptions": {
+        "TtlSeconds": 15,
+        "Region": "dogadjaji-region"
+      },
+      "RateLimitOptions": {
+        "EnableRateLimiting": true,
+        "Period": "10s",
+        "Limit": 5,
+        "ClientWhitelist": []
+      }
     },
     {
       "DownstreamPathTemplate": "/Lokacije/{everything}",
@@ -22,7 +32,11 @@
         }
       ],
       "UpstreamPathTemplate": "/api/lokacije/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ]
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "CacheOptions": {
+        "TtlSeconds": 15,
+        "Region": "lokacije-region"
+      }
     },
     {
       "DownstreamPathTemplate": "/Prijave/{everything}",
@@ -34,7 +48,11 @@
         }
       ],
       "UpstreamPathTemplate": "/api/prijave/{everything}",
-      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ]
+      "UpstreamHttpMethod": [ "GET", "POST", "PUT", "DELETE" ],
+      "SecurityOptions": {
+        "IPAllowedList": [],
+        "IPBlockedList": []
+      }
     },
     {
       "DownstreamPathTemplate": "/Predavaci/{everything}",
@@ -50,6 +68,10 @@
     }
   ],
   "GlobalConfiguration": {
-    "BaseUrl": "https://localhost:7000"
+    "BaseUrl": "https://localhost:7000",
+    "RateLimitOptions": {
+      "QuotaExceededMessage": "Previse zahteva. Pokusajte ponovo kasnije.",
+      "HttpStatusCode": 429
+    }
   }
 }

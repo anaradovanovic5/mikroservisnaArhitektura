@@ -12,12 +12,12 @@ namespace RegistrationService.HostedServices
         private IConnection? _connection;
         private IChannel? _channel;
 
-        // Rate limiter: max 2 emaila u sekundi
+        // Rate limiter: max 10 email-ova u minuti
         private readonly RateLimiter _rateLimiter = new FixedWindowRateLimiter(
             new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 2,
-                Window = TimeSpan.FromSeconds(1),
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 100
             });
