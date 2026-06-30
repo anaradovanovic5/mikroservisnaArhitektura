@@ -67,7 +67,10 @@ namespace LocationService.Controllers
             if (lokacija == null)
                 return NotFound($"Lokacija {request.LokacijaId} ne postoji.");
 
-            Console.WriteLine($"[Saga] Lokacija {request.LokacijaId} rezervisana za DogadjajId={request.DogadjajId}");
+            lokacija.BrojRezervacija += 1;
+            DbContext.SaveChanges();
+
+            Console.WriteLine($"[Saga] Lokacija {request.LokacijaId} rezervisana za DogadjajId={request.DogadjajId} (BrojRezervacija={lokacija.BrojRezervacija})");
             return Ok(new { Poruka = "Lokacija rezervisana.", request.LokacijaId });
         }
 
@@ -75,7 +78,14 @@ namespace LocationService.Controllers
         [HttpPost]
         public IActionResult OslobodiRezervaciju([FromBody] RezervacijaRequest request)
         {
-            Console.WriteLine($"[Saga][Kompenzacija] Lokacija {request.LokacijaId} oslobodjena za DogadjajId={request.DogadjajId}");
+            var lokacija = DbContext.Lokacije.Find(request.LokacijaId);
+            if (lokacija != null && lokacija.BrojRezervacija > 0)
+            {
+                lokacija.BrojRezervacija -= 1;
+                DbContext.SaveChanges();
+            }
+
+            Console.WriteLine($"[Saga][Kompenzacija] Lokacija {request.LokacijaId} oslobodjena za DogadjajId={request.DogadjajId} (BrojRezervacija={lokacija?.BrojRezervacija})");
             return Ok(new { Poruka = "Rezervacija oslobodjena.", request.LokacijaId });
         }
     }

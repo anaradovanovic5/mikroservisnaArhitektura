@@ -12,6 +12,12 @@ namespace RegistrationService.HostedServices
 {
     public sealed class RabbitMqConsumerHostedService : BackgroundService
     {
+        private const string RetryCountHeader = "x-retry-count";
+        private const int MaxRetryAttempts = 10;
+        private const string DlxExchange = "dogadjaji.dlx";
+        private const string DlqQueue = "dogadjaji.dlq";
+        private const string DlqRoutingKey = "dogadjaji.dlq";
+
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly RabbitMqOptions _options;
         private readonly ILogger<RabbitMqConsumerHostedService> _logger;
@@ -62,6 +68,28 @@ namespace RegistrationService.HostedServices
                 routingKey: _options.RoutingKey,
                 cancellationToken: stoppingToken);
 
+            // Finalni DLQ
+            await _channel.ExchangeDeclareAsync(
+                exchange: DlxExchange,
+                type: ExchangeType.Direct,
+                durable: true,
+                autoDelete: false,
+                cancellationToken: stoppingToken);
+
+            await _channel.QueueDeclareAsync(
+                queue: DlqQueue,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null,
+                cancellationToken: stoppingToken);
+
+            await _channel.QueueBindAsync(
+                queue: DlqQueue,
+                exchange: DlxExchange,
+                routingKey: DlqRoutingKey,
+                cancellationToken: stoppingToken);
+
             await _channel.BasicQosAsync(
                 prefetchSize: 0,
                 prefetchCount: _options.PrefetchCount,
@@ -103,7 +131,7 @@ namespace RegistrationService.HostedServices
 
                 await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
 
-                // IDEMPOTENT CONSUMER — proveri da li je poruka već obrađena
+                // IDEMPOTENT CONSUMER
                 var alreadyProcessed = await db.ProcessedMessages
                     .AnyAsync(x => x.EventId == ea.BasicProperties.MessageId, cancellationToken);
 
@@ -138,8 +166,84 @@ namespace RegistrationService.HostedServices
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Greška pri obradi RabbitMQ poruke.");
-                await _channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: cancellationToken);
+                await HandleFailureAsync(ea, cancellationToken);
             }
+        }
+
+        private async Task HandleFailureAsync(BasicDeliverEventArgs ea, CancellationToken cancellationToken)
+        {
+            if (_channel is null) return;
+
+            var headers = ea.BasicProperties.Headers;
+            long currentRetryCount = 0;
+            if (headers is not null && headers.TryGetValue(RetryCountHeader, out var raw) && raw is not null)
+            {
+                currentRetryCount = raw switch
+                {
+                    long l => l,
+                    int i => i,
+                    byte[] b => long.Parse(Encoding.UTF8.GetString(b)),
+                    _ => 0
+                };
+            }
+
+            var nextRetryCount = currentRetryCount + 1;
+
+            if (nextRetryCount < MaxRetryAttempts)
+            {
+                _logger.LogWarning(
+                    "Pokušaj {Attempt}/{Max} nije uspeo za poruku {MessageId} — vraćam u red.",
+                    nextRetryCount, MaxRetryAttempts, ea.BasicProperties.MessageId);
+
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+
+                var retryProperties = new BasicProperties
+                {
+                    Persistent = true,
+                    MessageId = ea.BasicProperties.MessageId,
+                    Type = ea.BasicProperties.Type,
+                    ContentType = ea.BasicProperties.ContentType,
+                    Headers = new Dictionary<string, object?>
+                    {
+                        { RetryCountHeader, nextRetryCount }
+                    }
+                };
+
+                await _channel.BasicPublishAsync(
+                    exchange: _options.Exchange,
+                    routingKey: _options.RoutingKey,
+                    mandatory: true,
+                    basicProperties: retryProperties,
+                    body: ea.Body.ToArray(),
+                    cancellationToken: cancellationToken);
+            }
+            else
+            {
+                _logger.LogError(
+                    "Poruka {MessageId} dostigla {Max} neuspešnih pokušaja — šaljem na finalni DLQ.",
+                    ea.BasicProperties.MessageId, MaxRetryAttempts);
+
+                var dlqProperties = new BasicProperties
+                {
+                    Persistent = true,
+                    MessageId = ea.BasicProperties.MessageId,
+                    Type = ea.BasicProperties.Type,
+                    ContentType = ea.BasicProperties.ContentType,
+                    Headers = new Dictionary<string, object?>
+                    {
+                        { RetryCountHeader, nextRetryCount }
+                    }
+                };
+
+                await _channel.BasicPublishAsync(
+                    exchange: DlxExchange,
+                    routingKey: DlqRoutingKey,
+                    mandatory: true,
+                    basicProperties: dlqProperties,
+                    body: ea.Body.ToArray(),
+                    cancellationToken: cancellationToken);
+            }
+            await _channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: cancellationToken);
         }
 
         public override void Dispose()

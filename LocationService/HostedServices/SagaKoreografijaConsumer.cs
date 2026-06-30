@@ -55,7 +55,6 @@ namespace LocationService.HostedServices
 
                         if (lokacija == null)
                         {
-                            // Kompenzacija — lokacija ne postoji
                             var failEv = JsonSerializer.Serialize(new LokacijaRezervacijaNeuspesnaEvent
                             {
                                 SagaId = ev.SagaId,
@@ -67,7 +66,10 @@ namespace LocationService.HostedServices
                         }
                         else
                         {
-                            // Uspeh — rezervacija OK
+                            // upisujem promenu stanja
+                            lokacija.BrojRezervacija += 1;
+                            await db.SaveChangesAsync(stoppingToken);
+
                             var okEv = JsonSerializer.Serialize(new LokacijaRezervacisanaEvent
                             {
                                 SagaId = ev.SagaId,
@@ -75,14 +77,25 @@ namespace LocationService.HostedServices
                                 LokacijaId = ev.LokacijaId
                             });
                             await PublishAsync("lokacija.rezervisana", okEv, stoppingToken);
-                            _logger.LogInformation("[Saga Koreografija][LocationService] Lokacija {Id} rezervisana, SagaId={SagaId}", ev.LokacijaId, ev.SagaId);
+                            _logger.LogInformation("[Saga Koreografija][LocationService] Lokacija {Id} rezervisana, SagaId={SagaId}, BrojRezervacija={Broj}", ev.LokacijaId, ev.SagaId, lokacija.BrojRezervacija);
                         }
                     }
                     else if (eventType == "prijava.neuspesna")
                     {
-                        // Kompenzacija — oslobodi rezervaciju
                         var ev = JsonSerializer.Deserialize<PrijavaNeuspesnaEvent>(body)!;
-                        _logger.LogInformation("[Saga Koreografija][Kompenzacija] Rezervacija lokacije {Id} oslobodjena, SagaId={SagaId}", ev.LokacijaId, ev.SagaId);
+
+                        using var scope = _scopeFactory.CreateScope();
+                        var db = scope.ServiceProvider.GetRequiredService<LocationDbContext>();
+                        var lokacija = await db.Lokacije.FindAsync(ev.LokacijaId);
+
+                        // oslobađam rezervaciju
+                        if (lokacija != null && lokacija.BrojRezervacija > 0)
+                        {
+                            lokacija.BrojRezervacija -= 1;
+                            await db.SaveChangesAsync(stoppingToken);
+                        }
+
+                        _logger.LogInformation("[Saga Koreografija][Kompenzacija] Rezervacija lokacije {Id} oslobodjena, SagaId={SagaId}, BrojRezervacija={Broj}", ev.LokacijaId, ev.SagaId, lokacija?.BrojRezervacija);
                     }
 
                     await _channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
