@@ -174,6 +174,18 @@ namespace EventService.Controllers
             await DbContext.SaveChangesAsync();
 
             var sagaId = Guid.NewGuid();
+
+            // upis početnog stanja saga procesa
+            DbContext.SagaStates.Add(new SagaState
+            {
+                SagaId = sagaId,
+                Status = "Started",
+                DogadjajId = dogadjaj.DogadjajId,
+                LokacijaId = dogadjaj.LokacijaId,
+                CurrentStep = "dogadjaj.kreiran"
+            });
+            await DbContext.SaveChangesAsync();
+
             var ev = new Shared.Events.DogadjajKreiranSagaEvent
             {
                 SagaId = sagaId,
@@ -188,5 +200,7 @@ namespace EventService.Controllers
             Console.WriteLine($"[Saga Koreografija] DogadjajKreiranSagaEvent objavljen, SagaId={sagaId}, DogadjajId={dogadjaj.DogadjajId}");
             return Ok(new { Poruka = "Saga koreografija pokrenuta.", SagaId = sagaId, DogadjajId = dogadjaj.DogadjajId });
         }
+
+
     }
 }

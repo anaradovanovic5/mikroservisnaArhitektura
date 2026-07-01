@@ -1,4 +1,6 @@
 ﻿using EventService.Data;
+using EventService.Domains;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
@@ -36,7 +38,6 @@ namespace EventService.HostedServices
             _connection = await factory.CreateConnectionAsync(stoppingToken);
             _channel = await _connection.CreateChannelAsync(cancellationToken: stoppingToken);
 
-            // Zajednicki topic exchange za sve saga koreografija dogadjaje
             await _channel.ExchangeDeclareAsync(
                 exchange: "saga.koreografija",
                 type: ExchangeType.Topic,
@@ -44,7 +45,6 @@ namespace EventService.HostedServices
                 autoDelete: false,
                 cancellationToken: stoppingToken);
 
-            // EventService sluša kompenzacione događaje — treba da obriše dogadjaj
             var queue = await _channel.QueueDeclareAsync(
                 queue: "saga.eventservice.kompenzacija",
                 durable: true,
@@ -54,6 +54,7 @@ namespace EventService.HostedServices
 
             await _channel.QueueBindAsync(queue.QueueName, "saga.koreografija", "lokacija.rezervacija.neuspesna", cancellationToken: stoppingToken);
             await _channel.QueueBindAsync(queue.QueueName, "saga.koreografija", "prijava.neuspesna", cancellationToken: stoppingToken);
+            await _channel.QueueBindAsync(queue.QueueName, "saga.koreografija", "prijava.kreirana", cancellationToken: stoppingToken);
 
             var consumer = new AsyncEventingBasicConsumer(_channel);
             consumer.ReceivedAsync += async (_, ea) =>
@@ -70,24 +71,76 @@ namespace EventService.HostedServices
                     if (eventType == "lokacija.rezervacija.neuspesna")
                     {
                         var ev = JsonSerializer.Deserialize<LokacijaRezervacijaNeuspesnaEvent>(body)!;
+
+                        var saga = await db.SagaStates.FirstOrDefaultAsync(s => s.SagaId == ev.SagaId, stoppingToken);
+                        if (saga == null || saga.Status != "Started")
+                        {
+                            _logger.LogWarning("[Saga Koreografija][Gate] Ignorišem {EventType} za SagaId={SagaId} — trenutni status='{Status}' (očekivano 'Started'), verovatno duplikat ili poruka van reda.",
+                                eventType, ev.SagaId, saga?.Status ?? "NE POSTOJI");
+                            await _channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
+                            return;
+                        }
+
                         var dogadjaj = await db.Dogadjaji.FindAsync(ev.DogadjajId);
                         if (dogadjaj != null)
                         {
                             db.Dogadjaji.Remove(dogadjaj);
-                            await db.SaveChangesAsync(stoppingToken);
-                            _logger.LogInformation("[Saga Koreografija][Kompenzacija] Dogadjaj {Id} obrisan (rezervacija lokacije pala, SagaId={SagaId})", ev.DogadjajId, ev.SagaId);
                         }
+
+                        saga.Status = "Failed";
+                        saga.CurrentStep = eventType;
+                        saga.ErrorMessage = ev.Razlog;
+                        saga.UpdatedAt = DateTime.UtcNow;
+                        await db.SaveChangesAsync(stoppingToken);
+
+                        _logger.LogInformation("[Saga Koreografija][Kompenzacija] Dogadjaj {Id} obrisan (rezervacija lokacije pala, SagaId={SagaId})", ev.DogadjajId, ev.SagaId);
                     }
                     else if (eventType == "prijava.neuspesna")
                     {
                         var ev = JsonSerializer.Deserialize<PrijavaNeuspesnaEvent>(body)!;
+
+                        var saga = await db.SagaStates.FirstOrDefaultAsync(s => s.SagaId == ev.SagaId, stoppingToken);
+                        if (saga == null || saga.Status != "Started")
+                        {
+                            _logger.LogWarning("[Saga Koreografija][Gate] Ignorišem {EventType} za SagaId={SagaId} — trenutni status='{Status}' (očekivano 'Started'), verovatno duplikat ili poruka van reda.",
+                                eventType, ev.SagaId, saga?.Status ?? "NE POSTOJI");
+                            await _channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
+                            return;
+                        }
+
                         var dogadjaj = await db.Dogadjaji.FindAsync(ev.DogadjajId);
                         if (dogadjaj != null)
                         {
                             db.Dogadjaji.Remove(dogadjaj);
-                            await db.SaveChangesAsync(stoppingToken);
-                            _logger.LogInformation("[Saga Koreografija][Kompenzacija] Dogadjaj {Id} obrisan (prijava pala, SagaId={SagaId})", ev.DogadjajId, ev.SagaId);
                         }
+
+                        saga.Status = "Failed";
+                        saga.CurrentStep = eventType;
+                        saga.ErrorMessage = ev.Razlog;
+                        saga.UpdatedAt = DateTime.UtcNow;
+                        await db.SaveChangesAsync(stoppingToken);
+
+                        _logger.LogInformation("[Saga Koreografija][Kompenzacija] Dogadjaj {Id} obrisan (prijava pala, SagaId={SagaId})", ev.DogadjajId, ev.SagaId);
+                    }
+                    else if (eventType == "prijava.kreirana")
+                    {
+                        var ev = JsonSerializer.Deserialize<PrijavaKreiranaEvent>(body)!;
+
+                        var saga = await db.SagaStates.FirstOrDefaultAsync(s => s.SagaId == ev.SagaId, stoppingToken);
+                        if (saga == null || saga.Status != "Started")
+                        {
+                            _logger.LogWarning("[Saga Koreografija][Gate] Ignorišem {EventType} za SagaId={SagaId} — trenutni status='{Status}' (očekivano 'Started'), verovatno duplikat ili poruka van reda.",
+                                eventType, ev.SagaId, saga?.Status ?? "NE POSTOJI");
+                            await _channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
+                            return;
+                        }
+
+                        saga.Status = "Completed";
+                        saga.CurrentStep = eventType;
+                        saga.UpdatedAt = DateTime.UtcNow;
+                        await db.SaveChangesAsync(stoppingToken);
+
+                        _logger.LogInformation("[Saga Koreografija] Saga {SagaId} uspešno završena (prijava kreirana, DogadjajId={DogadjajId}).", ev.SagaId, ev.DogadjajId);
                     }
 
                     await _channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);

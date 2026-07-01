@@ -1,6 +1,9 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using RegistrationService.Data;
+using RegistrationService.Domains;
 using Shared.Events;
 using System.Text;
 using System.Text.Json;
@@ -9,13 +12,15 @@ namespace RegistrationService.HostedServices
 {
     public class SagaKoreografijaConsumer : BackgroundService
     {
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<SagaKoreografijaConsumer> _logger;
         private readonly RabbitMqOptions _options;
         private IConnection? _connection;
         private IChannel? _channel;
 
-        public SagaKoreografijaConsumer(IOptions<RabbitMqOptions> options, ILogger<SagaKoreografijaConsumer> logger)
+        public SagaKoreografijaConsumer(IServiceScopeFactory scopeFactory, IOptions<RabbitMqOptions> options, ILogger<SagaKoreografijaConsumer> logger)
         {
+            _scopeFactory = scopeFactory;
             _options = options.Value;
             _logger = logger;
         }
@@ -49,8 +54,29 @@ namespace RegistrationService.HostedServices
                 {
                     var ev = JsonSerializer.Deserialize<LokacijaRezervacisanaEvent>(body)!;
 
-                    // Simulacija kreiranja prijave — uvek uspeva
-                    _logger.LogInformation("[Saga Koreografija][RegistrationService] Prijava kreirana za DogadjajId={Id}, SagaId={SagaId}", ev.DogadjajId, ev.SagaId);
+                    using var scope = _scopeFactory.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<RegistrationDbContext>();
+
+                    var vecPostoji = await db.Prijave.AnyAsync(p => p.DogadjajId == ev.DogadjajId, stoppingToken);
+
+                    if (!vecPostoji)
+                    {
+                        db.Prijave.Add(new Prijava
+                        {
+                            ImeUcesnika = "Saga",
+                            PrezimeUcesnika = "Automatska",
+                            EmailUcesnika = $"saga-{ev.SagaId}@dogadjajiapp.local",
+                            DatumPrijave = DateTime.UtcNow,
+                            DogadjajId = ev.DogadjajId
+                        });
+
+                        await db.SaveChangesAsync(stoppingToken);
+                        _logger.LogInformation("[Saga Koreografija][RegistrationService] Prijava upisana u bazu za DogadjajId={Id}, SagaId={SagaId}", ev.DogadjajId, ev.SagaId);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("[Saga Koreografija][RegistrationService] Prijava za DogadjajId={Id} već postoji — preskačem upis, SagaId={SagaId}", ev.DogadjajId, ev.SagaId);
+                    }
 
                     var okEv = JsonSerializer.Serialize(new PrijavaKreiranaEvent
                     {
